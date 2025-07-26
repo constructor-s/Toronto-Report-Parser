@@ -1,0 +1,184 @@
+import fitz  # PyMuPDF
+import warnings
+
+# Create a parser class that uses context manager protocol
+class IOLMasterPDFParser:
+    def __init__(self, filename):
+        self.filename = filename
+        self.doc = None
+
+    def __enter__(self):
+        self.doc = fitz.open(self.filename)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.doc is not None:
+            self.doc.close()
+
+    def get_pdf_data(self):
+        title = self.doc.metadata["title"]
+        # if title == "MMT-Full":
+        #     warnings.warn("MMT-Full PDF parsing is not implemented yet.")
+        if title.startswith("IOL"):
+            return self.get_pdf_data_iol()
+        else:
+            warnings.warn(f"PDF parsing is not implemented yet for {title}.")
+            return {}
+        
+    def get_pdf_data_iol(self):
+        result = {
+            "filename": self.filename,
+            "title": self.doc.metadata["title"]
+        }
+
+        if self.doc.metadata["title"] == "IOL-Haigis":
+            page = self.doc[0]
+
+            # Define regions for extracting text
+            MIDLINE_X = 0.5 * (313.1999816894531 + 316.0799865722656)
+            QUARTER_X = 54.0 + (313.1999816894531 - 54.0) / 2
+            regions = {
+                            "region_header_1": (54.0, 56.52001953125, MIDLINE_X, 140.0400390625),
+                            "region_header_2": (MIDLINE_X, 56.52001953125, 8.5 * 72, 140.0400390625),
+                            
+                            "region_od_header": (54.0, 193.79998779296875, 313.1999816894531, 310.6800231933594),
+                            "region_od_lens_1": (54.0, 310.6800231933594, QUARTER_X, 483.8399963378906),
+                            "region_od_lens_2": (QUARTER_X, 310.6800231933594, 313.1999816894531, 483.8399963378906),
+                            "region_od_lens_3": (54.0, 483.8399963378906, QUARTER_X, 657.0),
+                            "region_od_lens_4": (QUARTER_X, 483.8399963378906, 313.1999816894531, 657.0),
+                        }
+            for od_name, os_name in [
+                ("region_od_header", "region_os_header"),
+                ("region_od_lens_1", "region_os_lens_1"),
+                ("region_od_lens_2", "region_os_lens_2"),
+                ("region_od_lens_3", "region_os_lens_3"),
+                ("region_od_lens_4", "region_os_lens_4"),
+                ]:
+                regions[os_name] = (
+                    regions[od_name][0] + (316.0799865722656 - 54.0),
+                    regions[od_name][1],
+                    regions[od_name][2] + (316.0799865722656 - 54.0),
+                    regions[od_name][3],
+                )
+
+            # Extract text objects for each region
+            # text_objects = {key: page.get_text("dict", clip=rect) for key, rect in regions.items()} # This cuts off many text. Also the block bbox is much larger than the span bbox. Some blocks have multiple spans.
+            all_text = page.get_text("dict")
+            spans = {
+                key: self.get_spans_by_origin(all_text["blocks"], rect)
+                for key, rect in regions.items()
+            }
+
+            result.update(self.get_key_values(spans["region_header_1"]))
+            result.update(self.get_key_values(spans["region_header_2"]))
+            for eye in ["od", "os"]:
+                result[eye] = self.get_key_values(spans[f"region_{eye}_header"])
+                result[eye]["lenses"] = {}
+                for i in range(1, 5):
+                    lens = self.get_lens_values(spans[f"region_{eye}_lens_{i}"])
+                    result[eye]["lenses"][lens["name"]] = lens
+
+            # Store extracted text in a dictionary
+            # for key, value in spans.items():
+            #     result[key] = self.spans_to_lines(value)
+
+        else:
+            warnings.warn(f"IOL PDF parsing is not implemented yet for {self.doc.metadata['title']}.")
+        return result
+    
+    @staticmethod
+    def get_spans_by_origin(all_text_block, rect):
+        result = []
+        x0, y0, x1, y1 = rect
+        # Check if any line in the block overlaps with the region
+        for block in all_text_block:
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    x, y = span["origin"]
+                    if x0 < x < x1 and y0 < y < y1:
+                        result.append(span)
+        return result
+        
+    @staticmethod
+    def spans_to_lines(spans):
+        result = [(span["origin"][0], span["origin"][1], span["text"]) for span in spans]
+        # Sort the results, first by y-coordinate, then by x-coordinate
+        result.sort(key=lambda x: (x[1], x[0]))
+        # In the result, whenever the y changes, insert a new line
+        output = []
+        last_y = None
+        for x, y, text in result:
+            if y != last_y:
+                output.append([])
+            last_y = y
+            output[-1].append(text)
+        
+        return output
+    
+    @staticmethod
+    def get_key_values(spans):
+        # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
+        spans_by_y = {}
+        for span in spans:
+            x, y = span["origin"]
+            if y not in spans_by_y:
+                spans_by_y[y] = []
+            spans_by_y[y].append((x, y, span["text"]))
+
+        results = {}
+        # Sort the spans by x-coordinate
+        for y, v in spans_by_y.items():
+            v = sorted(v, key=lambda x: x[0])
+
+            # Now check if the first item ends with a colon
+            # If it does, use it as the key and the next item as the value
+            if len(v) > 1 and v[0][2].endswith(":"):
+                results[v[0][2][:-1]] = v[1][2]
+                
+        return results
+    
+    @staticmethod
+    def get_lens_values(spans):
+        assert spans, "No spans provided"
+
+        # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
+        spans_by_y = {}
+        for span in spans:
+            x, y = span["origin"]
+            if y not in spans_by_y:
+                spans_by_y[y] = []
+            spans_by_y[y].append(span)
+
+        results = {
+            "name": spans_by_y[min(spans_by_y.keys())][0]["text"]
+        }
+        
+        iol_numbers_flag = False
+        iol_count = 0
+        for y, v in spans_by_y.items():
+            v = sorted(v, key=lambda x: x["origin"][0])
+            
+            if iol_numbers_flag:
+                try:
+                    iol = float(v[0]["text"])
+                    ref = float(v[1]["text"])
+                    iol_count += 1
+                    results[f"iol{iol_count}"] = iol
+                    results[f"ref{iol_count}"] = ref
+                except (ValueError, IndexError):
+                    iol_numbers_flag = False
+
+            # Check if the line 'IOL (D)', 'REF (D)' has reached
+            if len(v) >= 2 and v[0]["text"] == "IOL (D)" and v[1]["text"] == "REF (D)":
+                iol_numbers_flag = True
+
+            # Now check if the first item ends with a colon
+            # If it does, use it as the key and the next item as the value
+            if v and v[0]["text"].endswith(":"):
+                results[v[0]["text"][:-1]] = v[1]["text"]
+            elif v: # e.g. 'Emme. IOL: 21.34'
+                parts = v[0]["text"].split(": ", 1)
+                if len(parts) == 2:
+                    results[parts[0]] = parts[1]
+                
+        return results
