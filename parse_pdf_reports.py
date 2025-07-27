@@ -1,3 +1,14 @@
+"""
+parse_pdf_reports.py
+Author: bill.shi (at) mail.utoronto.ca
+Date: 2025-07-27
+
+This driver script parses PDF reports using the IOLMasterPDFParser class
+from the toronto_report_parser module. It takes a glob pattern as an argument,
+searches for matching PDF files, and extracts data from each file. The results
+are then flattened and written to an Excel file with each type of parsed result
+in a separate sheet.
+"""
 from toronto_report_parser import IOLMasterPDFParser
 import sys
 import glob
@@ -5,8 +16,8 @@ import pandas as pd
 
 # The first argument is a glob pattern to match PDF files.
 import argparse
-parser = argparse.ArgumentParser(description="Parse PDF reports and export to Excel.")
-parser.add_argument("pattern", help="Glob pattern to match PDF files (e.g., '*.pdf')")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("pattern", help="Glob pattern to match PDF files (e.g., '*.pdf')") # TODO: The shell may expand this automatically, so the Python script may not see the glob pattern as intended.
 args = parser.parse_args()
 
 from collections import defaultdict
@@ -17,7 +28,7 @@ for pdf_file in pdf_files:
         pdf_data = parser.get_pdf_data()
         results[pdf_data["title"]].append(pdf_data)
 
-def flatten_dict(d, parent_key='', sep='_'):
+def flatten_dict(d: dict, parent_key='', sep='_') -> dict:
     """Flatten a nested dictionary."""
     items = {}
     for k, v in d.items():

@@ -1,10 +1,31 @@
+"""
+__init__.py
+Author: bill.shi (at) mail.utoronto.ca
+Date: 2025-07-27
+
+This module provides the IOLMasterPDFParser class to parse IOL Master PDF files.
+It uses the PyMuPDF library to extract text from specific regions of the PDF pages.
+"""
 import fitz  # PyMuPDF
 import warnings
 from itertools import groupby
 
 # Create a parser class that uses context manager protocol
 class IOLMasterPDFParser:
-    def __init__(self, filename):
+    """
+    A class to parse IOL Master PDF files.
+    This class uses the context manager protocol to open and close the PDF file.
+    It provides methods to extract data from the PDF based on the title of the document.
+    The supported titles are "IOL-Haigis", "IOL-Holladay-1", "IOL-SRK-T", and "MMT-Full".
+    If the title is not supported, a warning is issued and an empty dictionary is returned.
+    Example usage:
+    ```
+    with IOLMasterPDFParser("path/to/pdf") as parser:
+        data = parser.get_pdf_data()
+        print(data)
+    ```
+    """
+    def __init__(self, filename: str):
         self.filename = filename
         self.doc = None
 
@@ -28,7 +49,7 @@ class IOLMasterPDFParser:
             warnings.warn(f"PDF parsing is not implemented yet for {title}.")
             return {}
         
-    def get_pdf_data_iol(self):
+    def get_pdf_data_iol(self) -> dict:
         result = {
             "filename": self.filename,
             "title": self.doc.metadata["title"]
@@ -99,7 +120,7 @@ class IOLMasterPDFParser:
 
         return result
     
-    def get_pdf_data_mmt_full(self):
+    def get_pdf_data_mmt_full(self) -> dict:
         result = {
             "filename": self.filename,
             "title": self.doc.metadata["title"]
@@ -142,7 +163,7 @@ class IOLMasterPDFParser:
         return result
 
     @staticmethod
-    def get_spans_by_origin(all_text_block, rect):
+    def get_spans_by_origin(all_text_block: list, rect: tuple) -> list:
         result = []
         x0, y0, x1, y1 = rect
         # Check if any line in the block overlaps with the region
@@ -155,7 +176,7 @@ class IOLMasterPDFParser:
         return result
         
     @staticmethod
-    def spans_to_lines(spans):
+    def spans_to_lines(spans: list) -> list:
         # Sort the spans by y-coordinate
         # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
         spans = sorted(spans, key=lambda x: x["origin"][1])
@@ -177,7 +198,7 @@ class IOLMasterPDFParser:
         return [[span["text"] for span in spans] for spans in spans_by_y.values()]
 
     @staticmethod
-    def get_key_values(spans):
+    def get_key_values(spans: list) -> dict:
         # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
         spans_by_y = {}
         for span in spans:
@@ -199,7 +220,7 @@ class IOLMasterPDFParser:
         return results
     
     @staticmethod
-    def get_lens_values(spans):
+    def get_lens_values(spans: list) -> dict:
         assert spans, "No spans provided"
 
         # Sort the spans by y-coordinate
@@ -250,7 +271,7 @@ class IOLMasterPDFParser:
         return results
 
     @staticmethod
-    def get_mmt_data(spans):
+    def get_mmt_data(spans: list) -> dict:
         result = {}
 
         # Sort the spans by y-coordinate
