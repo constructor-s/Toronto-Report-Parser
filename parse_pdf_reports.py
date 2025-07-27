@@ -5,7 +5,7 @@ import pandas as pd
 
 # The first argument is a glob pattern to match PDF files.
 results = []
-pdf_files = glob.glob(sys.argv[1])
+pdf_files = sorted(glob.glob(sys.argv[1]))
 for pdf_file in pdf_files:
     with IOLMasterPDFParser(pdf_file) as parser:
         pdf_data = parser.get_pdf_data()
@@ -23,5 +23,5 @@ def flatten_dict(d, parent_key='', sep='_'):
     return dict(items)
 
 df = pd.DataFrame([flatten_dict(data) for data in results])
-df.apply(pd.to_numeric, errors='ignore')
+df = df.apply(pd.to_numeric, errors='ignore')
 df.to_excel("parsed_results.xlsx", index=False)
