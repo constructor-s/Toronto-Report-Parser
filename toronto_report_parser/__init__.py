@@ -1,5 +1,6 @@
 import fitz  # PyMuPDF
 import warnings
+from itertools import groupby
 
 # Create a parser class that uses context manager protocol
 class IOLMasterPDFParser:
@@ -45,7 +46,7 @@ class IOLMasterPDFParser:
                 "region_od_lens_3": (54.0, 483.8399963378906, QUARTER_X, 657.0),
                 "region_od_lens_4": (QUARTER_X, 483.8399963378906, 313.1999816894531, 657.0),
             }
-        elif self.doc.metadata["title"] == "IOL-Holladay-1":
+        elif self.doc.metadata["title"] in ("IOL-Holladay-1", "IOL-SRK-T"):
             regions = {
                 'region_header_1': (54.0, 56.52001953125, 314.6399841308594, 140.0400390625), 
                 'region_header_2': (314.6399841308594, 56.52001953125, 612.0, 140.0400390625), 
@@ -151,13 +152,10 @@ class IOLMasterPDFParser:
     def get_lens_values(spans):
         assert spans, "No spans provided"
 
+        # Sort the spans by y-coordinate
         # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
-        spans_by_y = {}
-        for span in spans:
-            x, y = span["origin"]
-            if y not in spans_by_y:
-                spans_by_y[y] = []
-            spans_by_y[y].append(span)
+        spans = sorted(spans, key=lambda x: x["origin"][1])
+        spans_by_y = {y: sorted(g, key=lambda s: s["origin"][0]) for y, g in groupby(spans, key=lambda s: s["origin"][1])}
 
         results = {
             "name": spans_by_y[min(spans_by_y.keys())][0]["text"]
@@ -166,7 +164,7 @@ class IOLMasterPDFParser:
         iol_numbers_flag = False
         iol_count = 0
         for y, v in spans_by_y.items():
-            v = sorted(v, key=lambda x: x["origin"][0])
+            # v = sorted(v, key=lambda x: x["origin"][0])
             
             if iol_numbers_flag:
                 try:
