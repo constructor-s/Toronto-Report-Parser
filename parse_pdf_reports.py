@@ -18,6 +18,7 @@ import pandas as pd
 import argparse
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("pattern", help="Glob pattern to match PDF files (e.g., '*.pdf')") # TODO: The shell may expand this automatically, so the Python script may not see the glob pattern as intended.
+parser.add_argument("-o", "--output", default="parsed_results.xlsx", help="Output Excel file name (default: parsed_results.xlsx)")
 args = parser.parse_args()
 
 from collections import defaultdict
@@ -40,7 +41,7 @@ def flatten_dict(d: dict, parent_key='', sep='_') -> dict:
     return items
 
 # Write each type of parsed result to one sheet in an Excel file.
-with pd.ExcelWriter("parsed_results.xlsx") as writer:
+with pd.ExcelWriter(args.output) as writer:
     for title, data in results.items():
         df = pd.DataFrame([flatten_dict(d) for d in data])
         df = df.apply(pd.to_numeric, errors='ignore')
