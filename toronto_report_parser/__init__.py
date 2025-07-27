@@ -220,9 +220,9 @@ class IOLMasterPDFParser:
                 try:
                     iol = float(v[0]["text"])
                     ref = float(v[1]["text"])
+                    results[f"iol_{iol_count}"] = iol
+                    results[f"ref_{iol_count}"] = ref
                     iol_count += 1
-                    results[f"iol{iol_count}"] = iol
-                    results[f"ref{iol_count}"] = ref
                     # A bolded line has the following:
                     # {'size': 8.889352798461914, 'flags': 20, 'bidi': 0, 'char_flags': 24, 'font': 'Courier-Bold', 'color': 0, 'alpha': 255, 'ascender': 0.6380000114440918, 'descender': -0.014999999664723873, 'text': '17.5', 'origin': (335.39984130859375, 412.6801452636719), 'bbox': (335.39984130859375, 403.9949951171875, 356.56842041015625, 412.88433837890625)}
                     # A non-bolded line has the following:
