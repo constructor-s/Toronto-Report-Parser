@@ -136,8 +136,8 @@ class IOLMasterPDFParser:
 
         # Store extracted text in a dictionary
         # This is mostly useful for debugging purposes
-        for key, value in spans.items():
-            result[key] = self.spans_to_lines(value)
+        # for key, value in spans.items():
+        #     result[key] = self.spans_to_lines(value)
 
         return result
 
@@ -312,6 +312,8 @@ class IOLMasterPDFParser:
                 while text:
                     key, value, text = get_next_key_value(text)
                     if key or value:
+                        if key in ("K1", "K2") and len(v) > i + 1 and v[i + 1]["text"].endswith("mm"):
+                            value = value + " " + v[i + 1]["text"]
                         if key == "K" and i >= 1 and v[i-1]["text"] == "∆":
                             key = "DeltaK"
                         if key in ("K1", "K2", "DeltaK"):
