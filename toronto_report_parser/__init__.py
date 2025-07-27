@@ -39,7 +39,7 @@ class IOLMasterPDFParser:
         if self.doc.metadata["title"] == "IOL-Haigis":
             regions = {
                 "region_header_1": (54.0, 56.52001953125, MIDLINE_X, 140.0400390625),
-                "region_header_2": (MIDLINE_X, 56.52001953125, 8.5 * 72, 140.0400390625),                
+                "region_header_2": (MIDLINE_X, 56.52001953125, 576.0, 140.0400390625),
                 "region_od_header": (54.0, 193.79998779296875, 313.1999816894531, 310.6800231933594),
                 "region_od_lens_1": (54.0, 310.6800231933594, QUARTER_X, 483.8399963378906),
                 "region_od_lens_2": (QUARTER_X, 310.6800231933594, 313.1999816894531, 483.8399963378906),
