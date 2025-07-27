@@ -22,6 +22,8 @@ class IOLMasterPDFParser:
         #     warnings.warn("MMT-Full PDF parsing is not implemented yet.")
         if title.startswith("IOL"):
             return self.get_pdf_data_iol()
+        elif title == "MMT-Full":
+            return self.get_pdf_data_mmt_full()
         else:
             warnings.warn(f"PDF parsing is not implemented yet for {title}.")
             return {}
@@ -97,6 +99,48 @@ class IOLMasterPDFParser:
 
         return result
     
+    def get_pdf_data_mmt_full(self):
+        result = {
+            "filename": self.filename,
+            "title": self.doc.metadata["title"]
+        }
+
+        page = self.doc[0]
+
+        MIDLINE_X = (54.0 + 576.0) / 2 # 0.5 * (313.1999816894531 + 316.0799865722656)
+        regions = {
+                "region_header_1": (54.0, 54.0, MIDLINE_X, 135.1199951171875),
+                "region_header_2": (MIDLINE_X, 54.0, 576.0, 135.1199951171875),
+
+                "region_od_measurements": (54.0, 259.44000244140625, 313.1999816894531, 653.8800048828125),
+                "region_os_measurements": (316.0799865722656, 259.44000244140625, 576.0, 653.8800048828125),
+        }
+
+        all_text = page.get_text("dict")
+        spans = {
+            key: self.get_spans_by_origin(all_text["blocks"], rect)
+            for key, rect in regions.items()
+        }
+
+        # Remove the spans with the following text in region_od_measurements:
+        # to_remove = ('Keratometer values', 'Anterior chamber depth values', 'White-to-white values')
+        # spans["region_od_measurements"] = [
+        #     span for span in spans["region_od_measurements"]
+        #     if span["text"] not in to_remove
+        # ]
+
+        result.update(self.get_key_values(spans["region_header_1"]))
+        result.update(self.get_key_values(spans["region_header_2"]))
+        for eye in ["od", "os"]:
+            result[eye] = self.get_mmt_data(spans[f"region_{eye}_measurements"])
+
+        # Store extracted text in a dictionary
+        # This is mostly useful for debugging purposes
+        for key, value in spans.items():
+            result[key] = self.spans_to_lines(value)
+
+        return result
+
     @staticmethod
     def get_spans_by_origin(all_text_block, rect):
         result = []
@@ -112,20 +156,26 @@ class IOLMasterPDFParser:
         
     @staticmethod
     def spans_to_lines(spans):
-        result = [(span["origin"][0], span["origin"][1], span["text"]) for span in spans]
-        # Sort the results, first by y-coordinate, then by x-coordinate
-        result.sort(key=lambda x: (x[1], x[0]))
-        # In the result, whenever the y changes, insert a new line
-        output = []
-        last_y = None
-        for x, y, text in result:
-            if y != last_y:
-                output.append([])
-            last_y = y
-            output[-1].append(text)
-        
-        return output
-    
+        # Sort the spans by y-coordinate
+        # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
+        spans = sorted(spans, key=lambda x: x["origin"][1])
+        spans_by_y = {}
+        # Re-do this but with a slight tolerance for y-coordinate
+        prev_y = None
+        for span in spans:
+            y = span["origin"][1]
+            if prev_y is None or abs(y - prev_y) > 1:
+                spans_by_y[y] = [span]
+                prev_y = y
+            else:
+                spans_by_y[prev_y].append(span)
+
+        # Sort the spans by x-coordinate within each y group
+        for y, v in spans_by_y.items():
+            spans_by_y[y] = sorted(v, key=lambda x: x["origin"][0])
+
+        return [[span["text"] for span in spans] for spans in spans_by_y.values()]
+
     @staticmethod
     def get_key_values(spans):
         # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
@@ -198,3 +248,102 @@ class IOLMasterPDFParser:
                     results[parts[0]] = parts[1]
                 
         return results
+
+    @staticmethod
+    def get_mmt_data(spans):
+        result = {}
+
+        # Sort the spans by y-coordinate
+        # Get the spans into a dictionary with the key being y and the value is a sorted list of (x, y, text) by y-coordinate
+        spans = sorted(spans, key=lambda x: x["origin"][1])
+        spans_by_y = {}
+        # Re-do this but with a slight tolerance for y-coordinate
+        prev_y = None
+        for span in spans:
+            y = span["origin"][1]
+            if prev_y is None or abs(y - prev_y) > 1:
+                spans_by_y[y] = [span]
+                prev_y = y
+            else:
+                spans_by_y[prev_y].append(span)
+        
+        # Next, go through all the text.
+        # The format can be:
+        # key: value
+        # key : value
+        # key1:value1 key2:value2
+        # key = value
+        def get_next_key_value(text):
+            i = 0
+            
+            key_start = 0
+            key_end = key_start
+            while key_end < len(text) and text[key_end] not in ":=":
+                key_end += 1
+            
+            if key_end == len(text):
+                return None, None, ""
+            
+            value_start = key_end + 1
+            value_end = value_start
+            while value_end < len(text) and text[value_end] not in ":=":
+                value_end += 1
+            if value_end < len(text) and text[value_end] in ":=":
+                # The scenario is key1:value1 key2:value2
+                # Need to back track to the last non-space character
+                while value_end > value_start and text[value_end - 1] != " ":
+                    value_end -= 1
+
+            return (
+                text[key_start:key_end],
+                text[value_start:value_end],
+                text[value_end:]
+            )
+        
+        for y, v in spans_by_y.items():
+            v.sort(key=lambda x: x["origin"][0])  # Sort by x-coordinate
+
+        al_snr_flag = False
+        al_snr_count = 0
+        acd_flag = False
+        for y, v in spans_by_y.items():
+            for i, span in enumerate(v):
+                text = span["text"]
+                while text:
+                    key, value, text = get_next_key_value(text)
+                    if key or value:
+                        if key == "K" and i >= 1 and v[i-1]["text"] == "∆":
+                            key = "DeltaK"
+                        if key in ("K1", "K2", "DeltaK"):
+                            i = 0
+                            while f"{key}_{i}" in result:
+                                i += 1
+                            key = f"{key}_{i}"
+                        result[key.strip(" ()")] = value.strip(" ()")
+            
+            if acd_flag:
+                for i in range(len(v)):
+                    result[f"ACD_{i}"] = v[i]["text"]
+                acd_flag = False
+            elif v:
+                acd_flag = v[0]["text"].startswith("ACD:")
+
+            # Find the line that starts with "AL" and "SNR"
+            # And then record the values on the subsequent lines
+            if v and v[0]["text"] == "AL" and v[1]["text"] == "SNR":
+                al_snr_flag = True
+            elif al_snr_flag:
+                # Parse the format: '22.50 mm', '9.7'
+                # Techinically it seems there could be another two values in the right column, but I haven't encountered such a report
+                try:
+                    al = v[0]["text"]
+                    al = float(al.replace(" mm", ""))
+                    snr = float(v[1]["text"])
+                    result[f"AL_{al_snr_count}"] = al
+                    result[f"SNR_{al_snr_count}"] = snr
+                    al_snr_count += 1
+                except (ValueError, IndexError):
+                    al_snr_flag = False
+        
+        return result
+                
