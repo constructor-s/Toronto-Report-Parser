@@ -4,9 +4,14 @@ import glob
 import pandas as pd
 
 # The first argument is a glob pattern to match PDF files.
+import argparse
+parser = argparse.ArgumentParser(description="Parse PDF reports and export to Excel.")
+parser.add_argument("pattern", help="Glob pattern to match PDF files (e.g., '*.pdf')")
+args = parser.parse_args()
+
 from collections import defaultdict
 results = defaultdict(list)  # The key is title
-pdf_files = sorted(glob.glob(sys.argv[1]))
+pdf_files = sorted(glob.glob(args.pattern))
 for pdf_file in pdf_files:
     with IOLMasterPDFParser(pdf_file) as parser:
         pdf_data = parser.get_pdf_data()
