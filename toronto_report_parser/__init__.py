@@ -31,59 +31,69 @@ class IOLMasterPDFParser:
             "title": self.doc.metadata["title"]
         }
 
+        page = self.doc[0]
+        # Define regions for extracting text
+        MIDLINE_X = 0.5 * (313.1999816894531 + 316.0799865722656)
+        QUARTER_X = 54.0 + (313.1999816894531 - 54.0) / 2
         if self.doc.metadata["title"] == "IOL-Haigis":
-            page = self.doc[0]
-
-            # Define regions for extracting text
-            MIDLINE_X = 0.5 * (313.1999816894531 + 316.0799865722656)
-            QUARTER_X = 54.0 + (313.1999816894531 - 54.0) / 2
             regions = {
-                            "region_header_1": (54.0, 56.52001953125, MIDLINE_X, 140.0400390625),
-                            "region_header_2": (MIDLINE_X, 56.52001953125, 8.5 * 72, 140.0400390625),
-                            
-                            "region_od_header": (54.0, 193.79998779296875, 313.1999816894531, 310.6800231933594),
-                            "region_od_lens_1": (54.0, 310.6800231933594, QUARTER_X, 483.8399963378906),
-                            "region_od_lens_2": (QUARTER_X, 310.6800231933594, 313.1999816894531, 483.8399963378906),
-                            "region_od_lens_3": (54.0, 483.8399963378906, QUARTER_X, 657.0),
-                            "region_od_lens_4": (QUARTER_X, 483.8399963378906, 313.1999816894531, 657.0),
-                        }
-            for od_name, os_name in [
-                ("region_od_header", "region_os_header"),
-                ("region_od_lens_1", "region_os_lens_1"),
-                ("region_od_lens_2", "region_os_lens_2"),
-                ("region_od_lens_3", "region_os_lens_3"),
-                ("region_od_lens_4", "region_os_lens_4"),
-                ]:
-                regions[os_name] = (
-                    regions[od_name][0] + (316.0799865722656 - 54.0),
-                    regions[od_name][1],
-                    regions[od_name][2] + (316.0799865722656 - 54.0),
-                    regions[od_name][3],
-                )
-
-            # Extract text objects for each region
-            # text_objects = {key: page.get_text("dict", clip=rect) for key, rect in regions.items()} # This cuts off many text. Also the block bbox is much larger than the span bbox. Some blocks have multiple spans.
-            all_text = page.get_text("dict")
-            spans = {
-                key: self.get_spans_by_origin(all_text["blocks"], rect)
-                for key, rect in regions.items()
+                "region_header_1": (54.0, 56.52001953125, MIDLINE_X, 140.0400390625),
+                "region_header_2": (MIDLINE_X, 56.52001953125, 8.5 * 72, 140.0400390625),                
+                "region_od_header": (54.0, 193.79998779296875, 313.1999816894531, 310.6800231933594),
+                "region_od_lens_1": (54.0, 310.6800231933594, QUARTER_X, 483.8399963378906),
+                "region_od_lens_2": (QUARTER_X, 310.6800231933594, 313.1999816894531, 483.8399963378906),
+                "region_od_lens_3": (54.0, 483.8399963378906, QUARTER_X, 657.0),
+                "region_od_lens_4": (QUARTER_X, 483.8399963378906, 313.1999816894531, 657.0),
             }
-
-            result.update(self.get_key_values(spans["region_header_1"]))
-            result.update(self.get_key_values(spans["region_header_2"]))
-            for eye in ["od", "os"]:
-                result[eye] = self.get_key_values(spans[f"region_{eye}_header"])
-                result[eye]["lenses"] = {}
-                for i in range(1, 5):
-                    lens = self.get_lens_values(spans[f"region_{eye}_lens_{i}"])
-                    result[eye]["lenses"][lens["name"]] = lens
-
-            # Store extracted text in a dictionary
-            # for key, value in spans.items():
-            #     result[key] = self.spans_to_lines(value)
-
+        elif self.doc.metadata["title"] == "IOL-Holladay-1":
+            regions = {
+                'region_header_1': (54.0, 56.52001953125, 314.6399841308594, 140.0400390625), 
+                'region_header_2': (314.6399841308594, 56.52001953125, 612.0, 140.0400390625), 
+                'region_od_header': (54.0, 193.79998779296875, 313.1999816894531, 310.6800231933594), 
+                'region_od_lens_1': (54.0, 310.6800231933594, 183.59999084472656, 458.6400146484375), 
+                'region_od_lens_2': (183.59999084472656, 310.6800231933594, 313.1999816894531, 458.6400146484375), 
+                'region_od_lens_3': (54.0, 458.6400146484375, 183.59999084472656, 606.5999755859375), 
+                'region_od_lens_4': (183.59999084472656, 458.6400146484375, 313.1999816894531, 606.5999755859375), 
+            }
         else:
             warnings.warn(f"IOL PDF parsing is not implemented yet for {self.doc.metadata['title']}.")
+            return result
+
+        for od_name, os_name in [
+            ("region_od_header", "region_os_header"),
+            ("region_od_lens_1", "region_os_lens_1"),
+            ("region_od_lens_2", "region_os_lens_2"),
+            ("region_od_lens_3", "region_os_lens_3"),
+            ("region_od_lens_4", "region_os_lens_4"),
+            ]:
+            regions[os_name] = (
+                regions[od_name][0] + (316.0799865722656 - 54.0),
+                regions[od_name][1],
+                regions[od_name][2] + (316.0799865722656 - 54.0),
+                regions[od_name][3],
+            )
+
+        # Extract text objects for each region
+        # text_objects = {key: page.get_text("dict", clip=rect) for key, rect in regions.items()} # This cuts off many text. Also the block bbox is much larger than the span bbox. Some blocks have multiple spans.
+        all_text = page.get_text("dict")
+        spans = {
+            key: self.get_spans_by_origin(all_text["blocks"], rect)
+            for key, rect in regions.items()
+        }
+
+        result.update(self.get_key_values(spans["region_header_1"]))
+        result.update(self.get_key_values(spans["region_header_2"]))
+        for eye in ["od", "os"]:
+            result[eye] = self.get_key_values(spans[f"region_{eye}_header"])
+            result[eye]["lenses"] = {}
+            for i in range(1, 5):
+                lens = self.get_lens_values(spans[f"region_{eye}_lens_{i}"])
+                result[eye]["lenses"][lens["name"]] = lens
+
+        # Store extracted text in a dictionary
+        # for key, value in spans.items():
+        #     result[key] = self.spans_to_lines(value)
+
         return result
     
     @staticmethod
